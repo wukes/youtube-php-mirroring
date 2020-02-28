@@ -4,15 +4,6 @@ $v=$_GET[v];
 if(empty($v)){
 $g_et='true';
 }
-function fcurl($url){
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, $url);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HEADER, false);
-$data = curl_exec($ch);
-curl_close($ch);
-return $data;
-}
 function isMobile(){    
     $useragent=isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';    
     $useragent_commentsblock=preg_match('|\(.*?\)|',$useragent,$matches)>0?$matches[0]:'';      
@@ -50,7 +41,7 @@ $parserurl=dirname($parserurl);
 
 $geturl= $parserurl.'/parser/index.php?videoid='."$v";
 
-$w=fcurl($geturl);
+$w=file_get_contents($geturl);
 
 $cv=json_decode($w); 
 
@@ -75,21 +66,86 @@ function object_array($array)
 $rr=object_array($cv);
 $aaaks=array_reverse(($rr[Download]));
 $vname=$rr[title];//视频名称
+
+
+$furl=$aaaks[3][url];//flv视频地址
+$murl=$aaaks[3][url];//mp4视频地址
 $pagetitle=$vname;
 
 //加密传输视频
 // Declare the class
-
+class GoogleUrlApi {
+	
+	// Constructor
+	function GoogleURLAPI($key,$apiURL = 'https://www.googleapis.com/urlshortener/v1/url') {
+		// Keep the API Url
+		$this->apiURL = $apiURL.'?key='.$key;
+	}
+	
+	// Shorten a URL
+	function shorten($url) {
+		// Send information along
+		$response = $this->send($url);
+		// Return the result
+		return isset($response['id']) ? $response['id'] : false;
+	}
+	
+	// Expand a URL
+	function expand($url) {
+		// Send information along
+		$response = $this->send($url,false);
+		// Return the result
+		return isset($response['longUrl']) ? $response['longUrl'] : false;
+	}
+	
+	// Send information to Google
+	function send($url,$shorten = true) {
+		// Create cURL
+		$ch = curl_init();
+		// If we're shortening a URL...
+		if($shorten) {
+			curl_setopt($ch,CURLOPT_URL,$this->apiURL);
+			curl_setopt($ch,CURLOPT_POST,1);
+			curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode(array("longUrl"=>$url)));
+			curl_setopt($ch,CURLOPT_HTTPHEADER,array("Content-Type: application/json"));
+		}
+		else {
+			curl_setopt($ch,CURLOPT_URL,$this->apiURL.'&shortUrl='.$url);
+		}
+		curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
+		// Execute the post
+		$result = curl_exec($ch);
+		// Close the connection
+		curl_close($ch);
+		// Return the result
+		return json_decode($result,true);
+	}		
+}
 require 'pheader.php';
+
+// Create instance with key
+$key = $gurl_api;
+$googer = new GoogleURLAPI($key);
+
+// Test: Shorten a URL
+//加密后的视频流链接
+$flvurl1 = $googer->shorten("$furl");//flv
+$mp4url1 = $googer->shorten("$murl");//mp4
+//获取视频列表
+
+$flvurl= $parserurl.'/ytproxy/browse.php?u='.$flvurl1;
+$mp4url= $parserurl.'/ytproxy/browse.php?u='.$mp4url1;
+$vname1=$vname;
+
 $API_key=$youtube_api;
 $jsonurl='https://www.googleapis.com/youtube/v3/search?part=snippet&order=relevance&amp;regionCode=lk&key='.$API_key.'&part=snippet&maxResults=20&relatedToVideoId='.$v.'&type=video';
 //To try without API key: $video_list = json_decode(file_get_contents(''));
-$video_list = json_decode(fcurl($jsonurl));
+$video_list = json_decode(file_get_contents($jsonurl));
 $video_list1=object_array($video_list);
 require 'header.php';
 ?>
 <script src="js/jquery.js"></script>
-<script src="//cdn.bootcss.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
+<script src="http://apps.bdimg.com/libs/bootstrap/3.3.4/js/bootstrap.min.js"></script>
 
 <div class="wrapper container">
 <?php
@@ -99,7 +155,7 @@ echo <<<EOT
         <div class="col-xs-12" id="video" style="z-index:-1000">
       <!--ckplayer配置开始-->
       <video controls="controls" poster="./thumbnail.php?vid=$v" autoplay="autoplay" width="100%" height="100%">
-  <source src="./mpaly.php?id=$v" type="video/mp4" />
+  <source src="$mp4url" type="video/mp4" />
 您的浏览器不支持HTML5播放MP4.
 </video>
    
@@ -107,7 +163,11 @@ echo <<<EOT
 </div>
 <div class="col-xs-12">
 <h3>$vname</h3> 
-
+<p>无法播放？<a href="./bakpay.php?v=$v">点此重试</a></p>
+<!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="http://v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
 EOT;
 }else{
     echo '<div class="alert alert-danger">错误！非法请求。</div>';
